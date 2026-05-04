@@ -13,7 +13,6 @@ class AutoclickerApp:
         self.hotkeys = HotkeyManager()
         self.ui = AutoclickerUI(
             settings=self.settings,
-            on_toggle=self.toggle_clicking,
             on_save=self.save_ui_settings,
             on_close=self.shutdown,
         )
@@ -28,12 +27,6 @@ class AutoclickerApp:
         except Exception as exc:
             self.ui.set_hotkey_error(str(exc))
         self.ui.mainloop()
-
-    def toggle_clicking(self, settings: Settings) -> bool:
-        self.settings = settings
-        running = self.clicker.toggle(settings)
-        self.ui.set_running(running)
-        return running
 
     def toggle_from_hotkey(self) -> None:
         if self.ui.is_capturing_hotkey():

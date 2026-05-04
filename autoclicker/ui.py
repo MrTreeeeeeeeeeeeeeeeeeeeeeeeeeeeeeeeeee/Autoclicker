@@ -10,16 +10,19 @@ from autoclicker.hotkeys import display_hotkey, mouse_button_to_hotkey, normaliz
 from autoclicker.settings import Settings, SettingsError, validate_settings
 
 
+WINDOW_WIDTH = 480
+COMPACT_HEIGHT = 345
+ERROR_HEIGHT = 385
+
+
 class AutoclickerUI(ctk.CTk):
     def __init__(
         self,
         settings: Settings,
-        on_toggle: Callable[[Settings], bool],
         on_save: Callable[[Settings], None],
         on_close: Callable[[], None],
     ) -> None:
         super().__init__()
-        self._on_toggle = on_toggle
         self._on_save = on_save
         self._on_close = on_close
         self._running = False
@@ -30,8 +33,7 @@ class AutoclickerUI(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.title("Autoclicker")
-        self.geometry("480x430")
-        self.minsize(460, 420)
+        self._set_window_height(COMPACT_HEIGHT)
         self.protocol("WM_DELETE_WINDOW", self._handle_close)
 
         self.delay_var = tk.StringVar(value=str(settings.delay_ms))
@@ -53,7 +55,7 @@ class AutoclickerUI(ctk.CTk):
         self.after(0, self._refresh_running_state)
 
     def set_hotkey_error(self, message: str) -> None:
-        self.after(0, lambda: self.set_status(f"Hotkey error: {message}", "error"))
+        self.after(0, lambda: self._show_error(f"Hotkey error: {message}"))
 
     def is_capturing_hotkey(self) -> bool:
         return self._capturing_hotkey is not None
@@ -69,6 +71,13 @@ class AutoclickerUI(ctk.CTk):
         self.status_label.configure(text=text, text_color=text_color)
         self.status_pill.configure(fg_color=bg_color)
 
+    def _set_window_height(self, height: int) -> None:
+        self.resizable(True, True)
+        self.geometry(f"{WINDOW_WIDTH}x{height}")
+        self.minsize(WINDOW_WIDTH, height)
+        self.maxsize(WINDOW_WIDTH, height)
+        self.resizable(False, False)
+
     def read_settings(self) -> Settings:
         settings = Settings(
             delay_ms=self._read_int(self.delay_var.get(), "Delay between clicks"),
@@ -82,17 +91,25 @@ class AutoclickerUI(ctk.CTk):
         return settings
 
     def _build(self) -> None:
+        title_font = ctk.CTkFont(size=26, weight="bold")
+        status_font = ctk.CTkFont(size=14, weight="bold")
+        label_font = ctk.CTkFont(size=15)
+        entry_font = ctk.CTkFont(size=16)
+        hotkey_font = ctk.CTkFont(size=15)
+        save_font = ctk.CTkFont(size=16, weight="bold")
+        arrow_font = ctk.CTkFont(size=13, weight="bold")
+
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=0)
 
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 10))
+        header.grid(row=0, column=0, sticky="ew", padx=22, pady=(8, 4))
         header.grid_columnconfigure(0, weight=1)
 
         title = ctk.CTkLabel(
             header,
             text="Autoclicker",
-            font=ctk.CTkFont(size=24, weight="bold"),
+            font=title_font,
             anchor="w",
         )
         title.grid(row=0, column=0, sticky="w")
@@ -102,77 +119,170 @@ class AutoclickerUI(ctk.CTk):
         self.status_label = ctk.CTkLabel(
             self.status_pill,
             text="Stopped",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=status_font,
             padx=12,
             pady=4,
         )
         self.status_label.pack()
 
         body = ctk.CTkFrame(self, corner_radius=8)
-        body.grid(row=1, column=0, sticky="nsew", padx=22, pady=10)
+        body.grid(row=1, column=0, sticky="ew", padx=22, pady=4)
         body.grid_columnconfigure(1, weight=1)
 
-        self._add_entry(body, 0, "Delay between clicks (ms)", self.delay_var)
-        self._add_entry(body, 1, "Random delay min (ms)", self.random_min_var)
-        self._add_entry(body, 2, "Random delay max (ms)", self.random_max_var)
-        self._add_entry(body, 3, "Click hold time (ms)", self.hold_var)
-        self._add_hotkey(body, 4, "Start / Stop hotkey", self.start_hotkey_var, "start")
-        self._add_hotkey(body, 5, "Show menu hotkey", self.menu_hotkey_var, "menu")
+        top_spacer = ctk.CTkFrame(body, fg_color="transparent", height=10)
+        top_spacer.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top_spacer.grid_propagate(False)
+
+        self._add_number_entry(
+            body,
+            1,
+            "Delay between clicks (ms)",
+            self.delay_var,
+            label_font,
+            entry_font,
+            arrow_font,
+            minimum=1,
+        )
+        self._add_number_entry(
+            body,
+            2,
+            "Random delay min (ms)",
+            self.random_min_var,
+            label_font,
+            entry_font,
+            arrow_font,
+        )
+        self._add_number_entry(
+            body,
+            3,
+            "Random delay max (ms)",
+            self.random_max_var,
+            label_font,
+            entry_font,
+            arrow_font,
+        )
+        self._add_number_entry(
+            body,
+            4,
+            "Click hold time (ms)",
+            self.hold_var,
+            label_font,
+            entry_font,
+            arrow_font,
+        )
+        self._add_hotkey(
+            body,
+            5,
+            "Start / Stop hotkey",
+            self.start_hotkey_var,
+            "start",
+            label_font,
+            hotkey_font,
+        )
+        self._add_hotkey(
+            body,
+            6,
+            "Show menu hotkey",
+            self.menu_hotkey_var,
+            "menu",
+            label_font,
+            hotkey_font,
+        )
 
         self.error_label = ctk.CTkLabel(
             body,
             text="",
             text_color="#f87171",
+            font=ctk.CTkFont(size=13),
             wraplength=390,
             justify="left",
             anchor="w",
         )
-        self.error_label.grid(row=6, column=0, columnspan=2, sticky="ew", padx=18, pady=(6, 0))
+        bottom_spacer = ctk.CTkFrame(body, fg_color="transparent", height=10)
+        bottom_spacer.grid(row=7, column=0, columnspan=2, sticky="ew")
+        bottom_spacer.grid_propagate(False)
+
+        self.error_label.grid(row=8, column=0, columnspan=2, sticky="ew", padx=12, pady=(4, 0))
+        self.error_label.grid_remove()
 
         actions = ctk.CTkFrame(self, fg_color="transparent")
-        actions.grid(row=2, column=0, sticky="ew", padx=22, pady=(8, 20))
-        actions.grid_columnconfigure((0, 1), weight=1)
-
-        self.toggle_button = ctk.CTkButton(
-            actions,
-            text="Start",
-            height=40,
-            command=self._handle_toggle,
-        )
-        self.toggle_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        actions.grid(row=2, column=0, sticky="ew", padx=22, pady=(8, 8))
+        actions.grid_columnconfigure(0, weight=1)
 
         self.save_button = ctk.CTkButton(
             actions,
             text="Save",
-            height=40,
+            height=36,
+            font=save_font,
             fg_color="#475569",
             hover_color="#64748b",
             command=self._handle_save,
         )
-        self.save_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.save_button.grid(row=0, column=0, sticky="ew")
 
-    def _add_entry(
+    def _add_number_entry(
         self,
         parent: ctk.CTkFrame,
         row: int,
         label: str,
         variable: tk.StringVar,
+        label_font: ctk.CTkFont,
+        entry_font: ctk.CTkFont,
+        arrow_font: ctk.CTkFont,
+        minimum: int = 0,
     ) -> None:
-        ctk.CTkLabel(parent, text=label, anchor="w").grid(
+        ctk.CTkLabel(parent, text=label, font=label_font, anchor="w").grid(
             row=row,
             column=0,
             sticky="w",
-            padx=18,
-            pady=(16 if row == 0 else 9, 0),
+            padx=12,
+            pady=(6 if row == 0 else 4, 0),
         )
-        entry = ctk.CTkEntry(parent, textvariable=variable, justify="right")
-        entry.grid(
+
+        control = ctk.CTkFrame(parent, fg_color="transparent")
+        control.grid(
             row=row,
             column=1,
             sticky="ew",
-            padx=18,
-            pady=(16 if row == 0 else 9, 0),
+            padx=12,
+            pady=(6 if row == 0 else 4, 0),
         )
+        control.grid_columnconfigure(0, weight=1)
+
+        entry = ctk.CTkEntry(
+            control,
+            textvariable=variable,
+            justify="right",
+            font=entry_font,
+            height=30,
+        )
+        entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        step_up = ctk.CTkButton(
+            control,
+            text="▲",
+            width=30,
+            height=30,
+            corner_radius=6,
+            font=arrow_font,
+            fg_color="#475569",
+            hover_color="#64748b",
+            command=lambda: self._adjust_number(variable, label, 5, minimum),
+        )
+        step_up.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+
+        step_down = ctk.CTkButton(
+            control,
+            text="▼",
+            width=30,
+            height=30,
+            corner_radius=6,
+            font=arrow_font,
+            fg_color="#475569",
+            hover_color="#64748b",
+            command=lambda: self._adjust_number(variable, label, -5, minimum),
+        )
+        step_down.grid(row=0, column=2, sticky="ew")
 
     def _add_hotkey(
         self,
@@ -181,35 +291,26 @@ class AutoclickerUI(ctk.CTk):
         label: str,
         variable: tk.StringVar,
         target: str,
+        label_font: ctk.CTkFont,
+        button_font: ctk.CTkFont,
     ) -> None:
-        ctk.CTkLabel(parent, text=label, anchor="w").grid(
+        ctk.CTkLabel(parent, text=label, font=label_font, anchor="w").grid(
             row=row,
             column=0,
             sticky="w",
-            padx=18,
-            pady=(9, 0),
+            padx=12,
+            pady=(4, 0),
         )
         button = ctk.CTkButton(
             parent,
             textvariable=variable,
+            height=30,
+            font=button_font,
             fg_color="#1f2937",
             hover_color="#334155",
             command=lambda: self._begin_hotkey_capture(target),
         )
-        button.grid(row=row, column=1, sticky="ew", padx=18, pady=(9, 0))
-
-    def _handle_toggle(self) -> None:
-        if self._capturing_hotkey:
-            self._show_error("Finish choosing the hotkey before starting.")
-            return
-
-        try:
-            settings = self.read_settings()
-            self._clear_error()
-            running = self._on_toggle(settings)
-            self.set_running(running)
-        except (SettingsError, ValueError, RuntimeError, OSError) as exc:
-            self._show_error(str(exc))
+        button.grid(row=row, column=1, sticky="ew", padx=12, pady=(4, 0))
 
     def _handle_save(self) -> None:
         try:
@@ -310,18 +411,36 @@ class AutoclickerUI(ctk.CTk):
 
     def _refresh_running_state(self) -> None:
         if self._running:
-            self.toggle_button.configure(text="Stop")
             self.set_status("Running", "running")
         else:
-            self.toggle_button.configure(text="Start")
             self.set_status("Stopped", "neutral")
 
     def _show_error(self, message: str) -> None:
+        self._set_window_height(ERROR_HEIGHT)
         self.error_label.configure(text=message)
+        self.error_label.grid()
         self.set_status("Hotkey error" if "hotkey" in message.lower() else "Error", "error")
 
     def _clear_error(self) -> None:
         self.error_label.configure(text="")
+        self.error_label.grid_remove()
+        self._set_window_height(COMPACT_HEIGHT)
+
+    def _adjust_number(
+        self,
+        variable: tk.StringVar,
+        label: str,
+        delta: int,
+        minimum: int,
+    ) -> None:
+        try:
+            current = self._read_int(variable.get(), label)
+        except ValueError as exc:
+            self._show_error(str(exc))
+            return
+
+        variable.set(str(max(minimum, current + delta)))
+        self._clear_error()
 
     @staticmethod
     def _read_int(value: str, label: str) -> int:
